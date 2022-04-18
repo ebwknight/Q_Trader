@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from readData import get_data
 from tech_ind import MACD, RSI, BBP
+from TabularQLearner import TabularQLearner
 
 class StockEnvironment:
 
@@ -11,6 +12,7 @@ class StockEnvironment:
     self.fixed_cost = fixed
     self.floating_cost = floating
     self.starting_cash = starting_cash
+    self.trained_learner = None
 
 
   def prepare_world (self, start_date, end_date, symbol):
@@ -18,24 +20,30 @@ class StockEnvironment:
     Read the relevant price data and calculate some indicators.
     Return a DataFrame containing everything you need.
     """
-    prices = get_data(start_date, end_date, symbol)
+    prices = get_data(start_date, end_date, [symbol])
     rsi = RSI(prices, 2)
     macd, signal, histogram = MACD(start_date, end_date, prices)
     bbp = BBP(start_date, end_date, prices, 14)
-    prices.join(rsi, how='left')
-    prices.join(macd, how='left')
-    prices.join(bbp, how='left')
+    prices = prices.join(rsi, how='right')
+    prices = prices.join(bbp, how='right')
+    prices = prices.join(macd, how='right')
+    prices = prices.join(signal, how='right')
+    prices['MACD'] = prices['MACD'] - prices['SIG']
+    del prices['SIG']
     print(prices)
-
     return prices
 
   
   def calc_state (self, df, day, holdings):
     """ Quantizes the state to a single number. """
+    state = df[day].product(axis=1, skipna=True)*holdings
+    print(state)
+    pass
+
+  def reward(self, state, holdings, day, data):
 
     pass
 
-  
   def train_learner( self, start = None, end = None, symbol = None, trips = 0, dyna = 0,
                      eps = 0.0, eps_decay = 0.0 ):
     """
@@ -47,6 +55,16 @@ class StockEnvironment:
 
     Trip 499 net result: $13600.00
     """
+    #Number of states will depend on how I quantize data
+    #How to caluclate r?
+    #QL = TabularQLearner(states=100, actions=5, epsilon=eps, epsilon_decay=eps_decay)
+
+    data = self.prepare_world(start, end, symbol)
+    # s = self.calc_state(data, start, 0)
+    # a = QL.test(s)
+  
+
+
 
     pass
 
@@ -91,13 +109,11 @@ if __name__ == '__main__':
   sim_args.add_argument('--trips', default=500, type=int, help='Round trips through training data.')
 
   args = parser.parse_args()
-
-
+  print(args)
   # Create an instance of the environment class.
   env = StockEnvironment( fixed = args.fixed, floating = args.floating, starting_cash = args.cash,
                           share_limit = args.shares )
 
-  env.prepare_world()
 
   # Construct, train, and store a Q-learning trader.
   env.train_learner( start = args.train_start, end = args.train_end,
