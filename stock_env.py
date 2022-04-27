@@ -106,12 +106,15 @@ class StockEnvironment:
 
   def reward(self, day, wallet, sold):
 
-    print('SOLD: ' + str(sold))
+    #print('SOLD: ' + str(sold))
 
     r = 0
     #checking for selling isn't working
-    
-    if (sold > 0 and self.lastBuy != None): #sanity check
+
+    #scenarios where
+    long_term_sold_options = [(1000., 0.), (-1000., 0.),(1000., -1000.), (-1000., 1000.)]
+
+    if (sold in long_term_sold_options and self.lastBuy != None): #sanity check
       print("giving reward for selling")
       long_term_reward = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
       print('Long term reward: ' + str(long_term_reward))
@@ -151,7 +154,7 @@ class StockEnvironment:
 
     while ((endCondition != True) and (tripNum < 50)):
 
-      sold = 0
+      sold = (0.0, 0.0)
       tripNum += 1
       wallet['Cash'] = self.starting_cash
       wallet['Holdings'] = 0
@@ -189,7 +192,7 @@ class StockEnvironment:
         s = self.calc_state(data, day, wallet.shift(periods=1).loc[day, 'Holdings'])
         print("State: " + str(s))
         r = self.reward(day, wallet, sold)
-        sold = 0  
+        sold = (0.0,0.0)
         print("Reward: " + str(r))
         a = self.QL.train(s, r)
         print("Action: " + str(a))
@@ -218,7 +221,7 @@ class StockEnvironment:
         wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
         wallet.loc[day, 'Trades'] = nextTrade
 
-        sold = abs(wallet.shift(periods=1).loc[day, 'Holdings'] - wallet.loc[day,'Holdings'])
+        sold = (wallet.shift(periods=1).loc[day, 'Holdings'], wallet.loc[day,'Holdings'])
       
       # Compose the output trade list.
       trade_list = []
