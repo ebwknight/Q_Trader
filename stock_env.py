@@ -111,7 +111,7 @@ class StockEnvironment:
     
     if (sold > 0 and self.lastBuy != None): #sanity check
       print("giving reward for selling")
-      r = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
+      r = wallet.shift(periods = 1).loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
       print(r)
     else:
       r = wallet.loc[day, 'Value'] - wallet.shift(periods=1).loc[day,'Value']
@@ -172,8 +172,8 @@ class StockEnvironment:
       wallet.loc[firstDay, 'Holdings'] += nextTrade
       wallet.loc[firstDay, 'Value'] = wallet.loc[firstDay, 'Cash'] + (data.loc[firstDay, symbol] * wallet.loc[firstDay, 'Holdings'])
       wallet.loc[firstDay, 'Trades'] = nextTrade
-      
-      
+
+
       #NEED TO FACTOR IN TRADING COSTS
       for day in data.index[1:]:
         #update wallet with yesterdays values
@@ -184,7 +184,7 @@ class StockEnvironment:
         s = self.calc_state(data, day, wallet.shift(periods=1).loc[day, 'Holdings'])
         print("State: " + str(s))
         r = self.reward(day, wallet, sold)
-        sold = 0
+        sold = 0  
         print("Reward: " + str(r))
         a = self.QL.train(s, r)
         print("Action: " + str(a))
