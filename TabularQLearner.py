@@ -26,7 +26,7 @@ class TabularQLearner:
 
         next_action = np.argmax(self.Qtab[s]) #optimal by default
         if (rand.random() < self.epsilson):
-            next_action = rand.randint(0,3) #explore
+            next_action = rand.randint(0,self.actions-1) #explore
 
         self.ptsd.append([self.prev_state, self.prev_action, s, r]) #append to memories
         #update instance variables
