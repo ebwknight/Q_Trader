@@ -54,7 +54,7 @@ class StockEnvironment:
     #bucket into 0-4
     rsiState = 0
     rsi = df.loc[day, 'RSI']
-    print('calculating state for : ' + str(day))
+    #print('calculating state for : ' + str(day))
     if (rsi < rsiQ1): rsiState = 0
     elif (rsi < rsiQ2 and rsi >= rsiQ1): rsiState = 1
     elif (rsi < rsiQ3 and rsi >= rsiQ2): rsiState = 2
@@ -104,23 +104,15 @@ class StockEnvironment:
     return s
     
 
-  def reward(self, day, wallet, sold):
-
-    #print('SOLD: ' + str(sold))
+  def reward(self, day, wallet):
 
     r = 0
     #checking for selling isn't working
-
-    #scenarios where
-    long_term_sold_options = [(1000., 0.), (-1000., 0.),(1000., -1000.), (-1000., 1000.)]
-
-    if (sold in long_term_sold_options and self.lastBuy != None): #sanity check
-      print("giving reward for selling")
-      long_term_reward = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
-      print('Long term reward: ' + str(long_term_reward))
-      prev_day_r = wallet.loc[day, 'Value'] - wallet.shift(periods=1).loc[day,'Value']
-      print('short term reward: ' + str(prev_day_r))
-      r = long_term_reward + prev_day_r
+    sold = abs(wallet.shift(periods=1).loc[day, 'Holdings'] - wallet.loc[day,'Holdings'])
+    if (sold > 0 and self.lastBuy != None): #sanity check
+      #print("giving reward for selling")
+      r = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
+      #print(r)
     else:
       r = wallet.loc[day, 'Value'] - wallet.shift(periods=1).loc[day,'Value']
     
@@ -154,7 +146,6 @@ class StockEnvironment:
 
     while ((endCondition != True) and (tripNum < 50)):
 
-      sold = (0.0, 0.0)
       tripNum += 1
       wallet['Cash'] = self.starting_cash
       wallet['Holdings'] = 0
@@ -180,64 +171,65 @@ class StockEnvironment:
       wallet.loc[firstDay, 'Holdings'] += nextTrade
       wallet.loc[firstDay, 'Value'] = wallet.loc[firstDay, 'Cash'] + (data.loc[firstDay, symbol] * wallet.loc[firstDay, 'Holdings'])
       wallet.loc[firstDay, 'Trades'] = nextTrade
-
-
+      
       #NEED TO FACTOR IN TRADING COSTS
       for day in data.index[1:]:
         #update wallet with yesterdays values
-        #wallet.loc[day, 'Holdings'] = wallet.shift(periods=1).loc[day, 'Holdings']
+        wallet.loc[day, 'Holdings'] = wallet.shift(periods=1).loc[day, 'Holdings']
         wallet.loc[day, 'Cash'] = wallet.shift(periods=1).loc[day, 'Cash']
-        wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.shift(periods=1).loc[day, 'Holdings'])
-        print(wallet)
-        s = self.calc_state(data, day, wallet.shift(periods=1).loc[day, 'Holdings'])
-        print("State: " + str(s))
-        r = self.reward(day, wallet, sold)
-        sold = (0.0,0.0)
-        print("Reward: " + str(r))
-        a = self.QL.train(s, r)
-        print("Action: " + str(a))
+        wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
+  
+        s = self.calc_state(data, day, wallet.loc[day, 'Holdings'])
+        #print("State: " + str(s))
+        r = self.reward(day, wallet)
+        #print("Reward: " + str(r))
+        a =self.QL.train(s, r)
+        #print("Action: " + str(a))
 
         nextTrade = 0
-        if (a == 0):#LONG
-          if (wallet.shift(periods=1).loc[day, 'Holdings'] != 1000): 
-            print('buying long position')
-            nextTrade = 1000 - wallet.shift(periods=1).loc[day, 'Holdings']
-            self.lastBuy = day          
-        elif (a == 2):#SHORT
-          if (wallet.shift(periods=1).loc[day, 'Holdings'] != -1000): 
-            print('taking short position...')
-            nextTrade = -1000 - wallet.shift(periods=1).loc[day, 'Holdings']
-            self.lastBuy = day
+        if ((a == 0) and (wallet.loc[day, 'Holdings'] != 1000)): #LONG
+          #print('buying or holding long position...')
+          nextTrade = 1000 - wallet.loc[day, 'Holdings']
+          self.lastBuy = day          
+        elif ((a == 2) and (wallet.loc[day, 'Holdings'] != -1000)): #SHORT
+          #print('selling or holding short position...')
+          nextTrade = -1000 - wallet.loc[day, 'Holdings']
+          self.lastBuy = day
         elif (a == 1): #FLAT
-          print('moving to flat position...')
-          nextTrade = 0 - wallet.shift(periods=1).loc[day, 'Holdings']
+          #print('moving to flat position...')
+          nextTrade = 0 - wallet.loc[day, 'Holdings']
 
         #print("next Trade: " + str(nextTrade))
         cost = 0
         if nextTrade != 0:
-          cost = self.fixed_cost + (self.floating_cost * nextTrade)
+          cost = self.fixed_cost + (self.floating_cost * abs(nextTrade))
         wallet.loc[day, 'Cash'] -= (data.loc[day, symbol] * nextTrade) + cost
-        wallet.loc[day, 'Holdings'] = wallet.shift(periods=1).loc[day, 'Holdings'] + nextTrade
-        wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
+        wallet.loc[day, 'Holdings'] += nextTrade
+        #wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
         wallet.loc[day, 'Trades'] = nextTrade
 
-        sold = (wallet.shift(periods=1).loc[day, 'Holdings'], wallet.loc[day,'Holdings'])
-      
+        #print(wallet)
       # Compose the output trade list.
       trade_list = []
       #print(wallet.to_string())
       for day in wallet.index:
-        if wallet.loc[day,'Trades'] > 0:
-          trade_list.append([day.date(), symbol, 'BUY', 1000])
-        elif wallet.loc[day,'Trades'] < 0:
+        if wallet.loc[day,'Trades'] == 2000:
+          trade_list.append([day.date(), symbol, 'BUY', 2000])
+        elif wallet.loc[day,'Trades'] == 1000:
           trade_list.append([day.date(), symbol, 'SELL', 1000])
+        elif wallet.loc[day,'Trades'] == -1000:
+          trade_list.append([day.date(), symbol, 'SELL', 1000])
+        elif wallet.loc[day,'Trades'] == -2000:
+          trade_list.append([day.date(), symbol, 'SELL', 2000])
       
       print("Trip " + str(tripNum) + " complete!")
       #print(trade_list)
       trade_df = pd.DataFrame(trade_list, columns=['Date', 'Symbol', 'Direction', 'Shares'])
+      trade_df = trade_df.set_index('Date')
       #print(trade_df)
       trade_df.to_csv('trades.csv')
-
+      print(wallet)
+      print(trade_df)
       #make call to backtester here
       stats = assess_strategy()
       if (stats[0] == prevSR):

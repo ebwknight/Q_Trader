@@ -67,7 +67,7 @@ def assess_strategy(trade_file = "trades.csv", starting_value = 200000, fixed_co
     
     pval_df = (price_df * alloc_df).sum(axis=1)
     #print('\n')
-    #print(pval_df)
+    print(pval_df)
     #print("Start Date: " + str(start_date))
     #print("End Date: " + str(end_date))
     vals = assess_portfolio(pval_df)
