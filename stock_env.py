@@ -106,13 +106,18 @@ class StockEnvironment:
 
   def reward(self, day, wallet, sold):
 
+    print('SOLD: ' + str(sold))
+
     r = 0
     #checking for selling isn't working
     
     if (sold > 0 and self.lastBuy != None): #sanity check
       print("giving reward for selling")
-      r = wallet.shift(periods = 1).loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
-      print(r)
+      long_term_reward = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
+      print('Long term reward: ' + str(long_term_reward))
+      prev_day_r = wallet.loc[day, 'Value'] - wallet.shift(periods=1).loc[day,'Value']
+      print('short term reward: ' + str(prev_day_r))
+      r = long_term_reward + prev_day_r
     else:
       r = wallet.loc[day, 'Value'] - wallet.shift(periods=1).loc[day,'Value']
     
