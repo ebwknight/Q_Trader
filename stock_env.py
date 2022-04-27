@@ -100,15 +100,15 @@ class StockEnvironment:
     
     #(1000 * h) + (100 * rsiState) + (10 * bbpState) + macdState
     s = (5**3 * h) + (5**2 * rsiState) + (5**1 * bbpState) + macdState
-    print(s)
+    #print(s)
     return s
     
 
-  def reward(self, day, wallet):
+  def reward(self, day, wallet, sold):
 
     r = 0
     #checking for selling isn't working
-    sold = abs(wallet.shift(periods=1).loc[day, 'Holdings'] - wallet.loc[day,'Holdings'])
+    
     if (sold > 0 and self.lastBuy != None): #sanity check
       print("giving reward for selling")
       r = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
@@ -146,6 +146,7 @@ class StockEnvironment:
 
     while ((endCondition != True) and (tripNum < 50)):
 
+      sold = 0
       tripNum += 1
       wallet['Cash'] = self.starting_cash
       wallet['Holdings'] = 0
@@ -172,41 +173,47 @@ class StockEnvironment:
       wallet.loc[firstDay, 'Value'] = wallet.loc[firstDay, 'Cash'] + (data.loc[firstDay, symbol] * wallet.loc[firstDay, 'Holdings'])
       wallet.loc[firstDay, 'Trades'] = nextTrade
       
+      
       #NEED TO FACTOR IN TRADING COSTS
       for day in data.index[1:]:
         #update wallet with yesterdays values
-        wallet.loc[day, 'Holdings'] = wallet.shift(periods=1).loc[day, 'Holdings']
+        #wallet.loc[day, 'Holdings'] = wallet.shift(periods=1).loc[day, 'Holdings']
         wallet.loc[day, 'Cash'] = wallet.shift(periods=1).loc[day, 'Cash']
-        wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
+        wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.shift(periods=1).loc[day, 'Holdings'])
         print(wallet)
-        s = self.calc_state(data, day, wallet.loc[day, 'Holdings'])
+        s = self.calc_state(data, day, wallet.shift(periods=1).loc[day, 'Holdings'])
         print("State: " + str(s))
-        r = self.reward(day, wallet)
+        r = self.reward(day, wallet, sold)
+        sold = 0
         print("Reward: " + str(r))
-        a =self.QL.train(s, r)
+        a = self.QL.train(s, r)
         print("Action: " + str(a))
 
         nextTrade = 0
-        if ((a == 0) and (wallet.loc[day, 'Holdings'] != 1000)): #LONG
-          #print('buying or holding long position...')
-          nextTrade = 1000 - wallet.loc[day, 'Holdings']
-          self.lastBuy = day          
-        elif ((a == 2) and (wallet.loc[day, 'Holdings'] != -1000)): #SHORT
-          #print('selling or holding short position...')
-          nextTrade = -1000 - wallet.loc[day, 'Holdings']
-          self.lastBuy = day
+        if (a == 0):#LONG
+          if (wallet.shift(periods=1).loc[day, 'Holdings'] != 1000): 
+            print('buying long position')
+            nextTrade = 1000 - wallet.shift(periods=1).loc[day, 'Holdings']
+            self.lastBuy = day          
+        elif (a == 2):#SHORT
+          if (wallet.shift(periods=1).loc[day, 'Holdings'] != -1000): 
+            print('taking short position...')
+            nextTrade = -1000 - wallet.shift(periods=1).loc[day, 'Holdings']
+            self.lastBuy = day
         elif (a == 1): #FLAT
-          #print('moving to flat position...')
-          nextTrade = 0 - wallet.loc[day, 'Holdings']
+          print('moving to flat position...')
+          nextTrade = 0 - wallet.shift(periods=1).loc[day, 'Holdings']
 
         #print("next Trade: " + str(nextTrade))
         cost = 0
         if nextTrade != 0:
           cost = self.fixed_cost + (self.floating_cost * nextTrade)
         wallet.loc[day, 'Cash'] -= (data.loc[day, symbol] * nextTrade) + cost
-        wallet.loc[day, 'Holdings'] += nextTrade
+        wallet.loc[day, 'Holdings'] = wallet.shift(periods=1).loc[day, 'Holdings'] + nextTrade
         wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
         wallet.loc[day, 'Trades'] = nextTrade
+
+        sold = abs(wallet.shift(periods=1).loc[day, 'Holdings'] - wallet.loc[day,'Holdings'])
       
       # Compose the output trade list.
       trade_list = []
