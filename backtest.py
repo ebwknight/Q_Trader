@@ -46,28 +46,26 @@ def assess_strategy(trade_file = "trades.csv", starting_value = 200000, fixed_co
     #create df of allocations
     alloc_df = pd.DataFrame(0, index=price_df.index, columns=trade_df.Symbol.unique())
     alloc_df['CASH'] = starting_value
-    #print(alloc_df)
 
-    for i in range(len(trade_df)):
-        action = trade_df.iloc[i]['Direction']
-        ticker = trade_df.iloc[i]['Symbol']
-        shares = trade_df.iloc[i]['Shares']
-        date = trade_df.index[i]
-        value = price_df.at[trade_df.index[i], ticker]
+    for day in trade_df.index:
+        action = trade_df.loc[day, 'Direction']
+        ticker = trade_df.loc[day, 'Symbol']
+        shares = trade_df.loc[day, 'Shares']
+        price = price_df.at[day, ticker]
         if action == 'BUY':
             #print(f"Buying {shares} shares of {ticker}...")
-            alloc_df.loc[date:, ticker] += shares
-            alloc_df.loc[date:, 'CASH'] -= ((shares * value) + fixed_cost + (shares * value * floating_cost))
+            alloc_df.loc[day:, ticker] += shares
+            alloc_df.loc[day:, 'CASH'] -= ((abs(shares) * price) + fixed_cost + (abs(shares) * price * floating_cost))
             #print(alloc_df)
         elif action == 'SELL':
             #print(f"Selling {shares} shares of {ticker}...")
-            alloc_df.loc[date:, ticker] -= shares
-            alloc_df.loc[date:, 'CASH'] += ((shares * value) - fixed_cost - (shares * value * floating_cost))
+            alloc_df.loc[day:, ticker] -= shares
+            alloc_df.loc[day:, 'CASH'] += ((abs(shares) * price) - fixed_cost - (abs(shares) * price * floating_cost))
             #print(alloc_df)
-    
+    #print(alloc_df)
     pval_df = (price_df * alloc_df).sum(axis=1)
     #print('\n')
-    print(pval_df)
+    #print(pval_df)
     #print("Start Date: " + str(start_date))
     #print("End Date: " + str(end_date))
     vals = assess_portfolio(pval_df)

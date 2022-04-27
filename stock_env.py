@@ -2,6 +2,7 @@ import argparse
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+from pydantic import constr
 from readData import get_data
 from tech_ind import MACD, RSI, BBP
 from TabularQLearner import TabularQLearner
@@ -10,7 +11,7 @@ from OracleStrategy import OracleStrategy
 
 class StockEnvironment:
 
-  def __init__ (self, fixed = None, floating = None, starting_cash = None, share_limit = None):
+  def __init__ (self, fixed = 9.95, floating = 0.005, starting_cash = None, share_limit = None):
     self.shares = share_limit
     self.fixed_cost = fixed
     self.floating_cost = floating
@@ -34,6 +35,7 @@ class StockEnvironment:
     prices = prices.join(macd, how='left')
     prices = prices.join(signal, how='left')
     del prices['SIG']
+    #print(prices)
     return prices
 
   
@@ -132,7 +134,7 @@ class StockEnvironment:
     #Number of states will depend on how I quantize data
     #How to caluclate r?
     print("Initializing Learner and Preparing World...")
-    self.QL = TabularQLearner(states=375, actions=3, epsilon=eps, epsilon_decay=eps_decay, dyna=100)
+    self.QL = TabularQLearner(states=375, actions=3, epsilon=eps, epsilon_decay=eps_decay, dyna=50)
     data = self.prepare_world(start, end, symbol)
     wallet = pd.DataFrame(columns=['Cash', 'Holdings', 'Value', 'Trades'], index=data.index)
     #print(data)
@@ -167,7 +169,10 @@ class StockEnvironment:
         nextTrade = -1000
         self.lastBuy = firstDay
 
-      wallet.loc[firstDay, 'Cash'] -= (data.loc[firstDay, symbol] * nextTrade)
+      cost = 0
+      if nextTrade != 0:
+        cost = self.fixed_cost + (self.floating_cost * abs(nextTrade) * data.loc[firstDay, symbol])
+      wallet.loc[firstDay, 'Cash'] -= ((data.loc[firstDay, symbol] * abs(nextTrade)) + cost)
       wallet.loc[firstDay, 'Holdings'] += nextTrade
       wallet.loc[firstDay, 'Value'] = wallet.loc[firstDay, 'Cash'] + (data.loc[firstDay, symbol] * wallet.loc[firstDay, 'Holdings'])
       wallet.loc[firstDay, 'Trades'] = nextTrade
@@ -202,7 +207,7 @@ class StockEnvironment:
         #print("next Trade: " + str(nextTrade))
         cost = 0
         if nextTrade != 0:
-          cost = self.fixed_cost + (self.floating_cost * abs(nextTrade))
+          cost = self.fixed_cost + (self.floating_cost * abs(nextTrade) * data.loc[day, symbol])
         wallet.loc[day, 'Cash'] -= (data.loc[day, symbol] * nextTrade) + cost
         wallet.loc[day, 'Holdings'] += nextTrade
         #wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
@@ -216,7 +221,7 @@ class StockEnvironment:
         if wallet.loc[day,'Trades'] == 2000:
           trade_list.append([day.date(), symbol, 'BUY', 2000])
         elif wallet.loc[day,'Trades'] == 1000:
-          trade_list.append([day.date(), symbol, 'SELL', 1000])
+          trade_list.append([day.date(), symbol, 'BUY', 1000])
         elif wallet.loc[day,'Trades'] == -1000:
           trade_list.append([day.date(), symbol, 'SELL', 1000])
         elif wallet.loc[day,'Trades'] == -2000:
@@ -228,8 +233,8 @@ class StockEnvironment:
       trade_df = trade_df.set_index('Date')
       #print(trade_df)
       trade_df.to_csv('trades.csv')
-      print(wallet)
-      print(trade_df)
+      #print(wallet)
+      #print(trade_df)
       #make call to backtester here
       stats = assess_strategy()
       if (stats[0] == prevSR):
@@ -240,7 +245,7 @@ class StockEnvironment:
       # if (tripNum % 10 == 0):
       #   plt.plot(wallet['Value'] / wallet['Value'].iloc[0])
 
-      break
+      #break
     plt.plot(tVals, srVals)
     plt.savefig('BaselineVsQTrader.png')
     return True
@@ -279,8 +284,8 @@ if __name__ == '__main__':
 
   sim_args = parser.add_argument_group('simulation arguments')
   sim_args.add_argument('--cash', default=200000, type=float, help='Starting cash for the agent.')
-  sim_args.add_argument('--fixed', default=0.00, type=float, help='Fixed transaction cost.')
-  sim_args.add_argument('--floating', default='0.00', type=float, help='Floating transaction cost.')
+  sim_args.add_argument('--fixed', default=9.95, type=float, help='Fixed transaction cost.')
+  sim_args.add_argument('--floating', default='0.005', type=float, help='Floating transaction cost.')
   sim_args.add_argument('--shares', default=1000, type=int, help='Number of shares to trade (also position limit).')
   sim_args.add_argument('--symbol', default='DIS', help='Stock symbol to trade.')
   sim_args.add_argument('--trips', default=500, type=int, help='Round trips through training data.')
