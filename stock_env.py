@@ -279,7 +279,7 @@ class StockEnvironment:
       #break
     stats = assess_strategy(fixed_cost=0, floating_cost=0)
     plt.plot(tVals, srVals)
-    plt.savefig('BaselineVsQTrader.png')
+    plt.savefig('QTraderTrials.png')
     return True
 
   
