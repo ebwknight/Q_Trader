@@ -129,7 +129,7 @@ class StockEnvironment:
       #print(r)
     elif(sold in cross_flat):
       short_reward = wallet.loc[day, 'Value'] - wallet.shift(periods=1).loc[day,'Value']
-      long_reward = wallet.loc[day, 'Value'] - wallet.loc[self.lastLastBuy, 'Value']
+      long_reward = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
       #print('short reward: ' + str(short_reward))
       #print('long reward: ' + str(long_reward))
       r = short_reward + long_reward
@@ -164,7 +164,7 @@ class StockEnvironment:
     srVals = []
     tVals = []
 
-    while ((endCondition != True) and (tripNum < 500)):
+    while ((endCondition != True) and (tripNum < 200)):
 
       tripNum += 1
       wallet['Cash'] = self.starting_cash
@@ -281,6 +281,10 @@ class StockEnvironment:
 
     Test trip, net result: $31710.00
     Benchmark result: $6690.0000
+
+
+    Similair to train, but does not update q table orc caluclate rewards, and 
+    only runs through the data a single time
     """
     data = self.prepare_world(start, end, symbol)
     wallet = pd.DataFrame(columns=['Cash', 'Holdings', 'Value', 'Trades'], index=data.index)
@@ -296,7 +300,6 @@ class StockEnvironment:
     s = self.calc_state(data, firstDay, 0)
     a = self.QL.test(s)
 
-      #print("first action: " + str(a))
     nextTrade = 0
     if (a == 0): #LONG
       nextTrade = 1000
@@ -304,8 +307,7 @@ class StockEnvironment:
     elif (a == 1): #FLAT
       nextTrade = 0
     elif (a == 2): #SHORT
-      nextTrade = -1000
-        
+      nextTrade = -1000 
       self.lastBuy = firstDay
 
     cost = 0
@@ -324,27 +326,20 @@ class StockEnvironment:
       wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
   
       s = self.calc_state(data, day, wallet.loc[day, 'Holdings'])
-      #print("State: " + str(s))
-      #print("Reward: " + str(r))
       a =self.QL.test(s)
-        #prxint("Action: " + str(a))
 
       nextTrade = 0
       if ((a == 0) and (wallet.loc[day, 'Holdings'] != 1000)): #LONG
-        #print('buying or holding long position...')
         nextTrade = 1000 - wallet.loc[day, 'Holdings']
         self.lastLastBuy = self.lastBuy
         self.lastBuy = day          
       elif ((a == 2) and (wallet.loc[day, 'Holdings'] != -1000)): #SHORT
-        #print('selling or holding short position...')
         nextTrade = -1000 - wallet.loc[day, 'Holdings']
         self.lastLastBuy = self.lastBuy
         self.lastBuy = day
       elif (a == 1): #FLAT
-        #print('moving to flat position...')
         nextTrade = 0 - wallet.loc[day, 'Holdings']
 
-        #print("next Trade: " + str(nextTrade))
       cost = 0
       if nextTrade != 0:
         cost = self.fixed_cost + (self.floating_cost * abs(nextTrade) * data.loc[day, symbol])
@@ -357,7 +352,6 @@ class StockEnvironment:
 
       # Compose the output trade list.
     trade_list = []
-      #print(wallet.to_string())
     for day in wallet.index:
       if wallet.loc[day,'Trades'] == 2000:
         trade_list.append([day.date(), symbol, 'BUY', 2000])
@@ -368,17 +362,13 @@ class StockEnvironment:
       elif wallet.loc[day,'Trades'] == -2000:
           trade_list.append([day.date(), symbol, 'SELL', 2000])
       
-      #print(trade_list)
     trade_df = pd.DataFrame(trade_list, columns=['Date', 'Symbol', 'Direction', 'Shares'])
     trade_df = trade_df.set_index('Date')
-      #print(trade_df)
     trade_df.to_csv('trades.csv')
-      #print(wallet)
-      #print(trade_df)
       #make call to backtester here
+    print('TESTING STATS:')
     stats = assess_strategy()
-    print(stats)
-    
+
     return True
   
 
@@ -418,7 +408,7 @@ if __name__ == '__main__':
   #plt.plot(bline / bline.iloc[0])
   print("Beginning training...")
   # Construct, train, and store a Q-learning trader.
-  env.train_learner( start = args.train_start, end = args.train_end,
+  env.train_learner(start = args.train_start, end = args.train_end,
                      symbol = args.symbol, trips = args.trips, dyna = args.dyna,
                      eps = args.eps, eps_decay = args.eps_decay )
 
