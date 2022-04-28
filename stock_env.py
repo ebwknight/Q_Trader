@@ -2,7 +2,6 @@ import argparse
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-from pydantic import constr
 from readData import get_data
 from tech_ind import MACD, RSI, BBP
 from TabularQLearner import TabularQLearner
@@ -18,6 +17,8 @@ class StockEnvironment:
     self.starting_cash = starting_cash
     self.QL = None
     self.lastBuy = None
+    self.lastLastBuy = None
+
 
 
   def prepare_world (self, start_date, end_date, symbol):
@@ -110,11 +111,28 @@ class StockEnvironment:
 
     r = 0
     #checking for selling isn't working
-    sold = abs(wallet.shift(periods=1).loc[day, 'Holdings'] - wallet.loc[day,'Holdings'])
-    if (sold > 0 and self.lastBuy != None): #sanity check
+    sold = (wallet.shift(periods = 2).loc[day,'Holdings'], wallet.shift(periods = 1).loc[day,'Holdings'])
+    #print(wallet["Holdings"])
+
+    #conditions for a normal flat
+    normal_flat = [(-1000.,0.), (1000., 0.)]
+    #crossing flat-> still exiting though, so we should give a long term reward
+    cross_flat = [(-1000.,1000.), (1000., -1000.)]
+
+    if (sold in normal_flat): #sanity check
       #print("giving reward for selling")
-      r = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
+      short_reward = wallet.loc[day, 'Value'] - wallet.shift(periods=1).loc[day,'Value']
+      long_reward = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
+      #print('short reward: ' + str(short_reward))
+      #print('long reward: ' + str(long_reward))
+      r = short_reward + long_reward
       #print(r)
+    elif(sold in cross_flat):
+      short_reward = wallet.loc[day, 'Value'] - wallet.shift(periods=1).loc[day,'Value']
+      long_reward = wallet.loc[day, 'Value'] - wallet.loc[self.lastLastBuy, 'Value']
+      #print('short reward: ' + str(short_reward))
+      #print('long reward: ' + str(long_reward))
+      r = short_reward + long_reward
     else:
       r = wallet.loc[day, 'Value'] - wallet.shift(periods=1).loc[day,'Value']
     
@@ -146,7 +164,7 @@ class StockEnvironment:
     srVals = []
     tVals = []
 
-    while ((endCondition != True) and (tripNum < 50)):
+    while ((endCondition != True) and (tripNum < 500)):
 
       tripNum += 1
       wallet['Cash'] = self.starting_cash
@@ -167,6 +185,7 @@ class StockEnvironment:
         nextTrade = 0
       elif (a == 2): #SHORT
         nextTrade = -1000
+        
         self.lastBuy = firstDay
 
       cost = 0
@@ -189,16 +208,18 @@ class StockEnvironment:
         r = self.reward(day, wallet)
         #print("Reward: " + str(r))
         a =self.QL.train(s, r)
-        #print("Action: " + str(a))
+        #prxint("Action: " + str(a))
 
         nextTrade = 0
         if ((a == 0) and (wallet.loc[day, 'Holdings'] != 1000)): #LONG
           #print('buying or holding long position...')
           nextTrade = 1000 - wallet.loc[day, 'Holdings']
+          self.lastLastBuy = self.lastBuy
           self.lastBuy = day          
         elif ((a == 2) and (wallet.loc[day, 'Holdings'] != -1000)): #SHORT
           #print('selling or holding short position...')
           nextTrade = -1000 - wallet.loc[day, 'Holdings']
+          self.lastLastBuy = self.lastBuy
           self.lastBuy = day
         elif (a == 1): #FLAT
           #print('moving to flat position...')
@@ -251,7 +272,7 @@ class StockEnvironment:
     return True
 
   
-  def test_learner( self, start = None, end = None, symbol = None):
+  def test_learner(self, start = None, end = None, symbol = None):
     """
     Evaluate a trained Q-Learner on a particular stock trading task.
 
@@ -261,8 +282,104 @@ class StockEnvironment:
     Test trip, net result: $31710.00
     Benchmark result: $6690.0000
     """
+    data = self.prepare_world(start, end, symbol)
+    wallet = pd.DataFrame(columns=['Cash', 'Holdings', 'Value', 'Trades'], index=data.index)
+    #print(data)
+    prevSR = 0
 
-    pass
+    wallet['Cash'] = self.starting_cash
+    wallet['Holdings'] = 0
+    wallet['Value'] = 0
+    wallet['Trades'] = 0
+
+    firstDay = data.index[0]
+    s = self.calc_state(data, firstDay, 0)
+    a = self.QL.test(s)
+
+      #print("first action: " + str(a))
+    nextTrade = 0
+    if (a == 0): #LONG
+      nextTrade = 1000
+      self.lastBuy = firstDay
+    elif (a == 1): #FLAT
+      nextTrade = 0
+    elif (a == 2): #SHORT
+      nextTrade = -1000
+        
+      self.lastBuy = firstDay
+
+    cost = 0
+    if nextTrade != 0:
+      cost = self.fixed_cost + (self.floating_cost * abs(nextTrade) * data.loc[firstDay, symbol])
+    wallet.loc[firstDay, 'Cash'] -= ((data.loc[firstDay, symbol] * abs(nextTrade)) + cost)
+    wallet.loc[firstDay, 'Holdings'] += nextTrade
+    wallet.loc[firstDay, 'Value'] = wallet.loc[firstDay, 'Cash'] + (data.loc[firstDay, symbol] * wallet.loc[firstDay, 'Holdings'])
+    wallet.loc[firstDay, 'Trades'] = nextTrade
+      
+      #NEED TO FACTOR IN TRADING COSTS
+    for day in data.index[1:]:
+      #update wallet with yesterdays values
+      wallet.loc[day, 'Holdings'] = wallet.shift(periods=1).loc[day, 'Holdings']
+      wallet.loc[day, 'Cash'] = wallet.shift(periods=1).loc[day, 'Cash']
+      wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
+  
+      s = self.calc_state(data, day, wallet.loc[day, 'Holdings'])
+      #print("State: " + str(s))
+      #print("Reward: " + str(r))
+      a =self.QL.test(s)
+        #prxint("Action: " + str(a))
+
+      nextTrade = 0
+      if ((a == 0) and (wallet.loc[day, 'Holdings'] != 1000)): #LONG
+        #print('buying or holding long position...')
+        nextTrade = 1000 - wallet.loc[day, 'Holdings']
+        self.lastLastBuy = self.lastBuy
+        self.lastBuy = day          
+      elif ((a == 2) and (wallet.loc[day, 'Holdings'] != -1000)): #SHORT
+        #print('selling or holding short position...')
+        nextTrade = -1000 - wallet.loc[day, 'Holdings']
+        self.lastLastBuy = self.lastBuy
+        self.lastBuy = day
+      elif (a == 1): #FLAT
+        #print('moving to flat position...')
+        nextTrade = 0 - wallet.loc[day, 'Holdings']
+
+        #print("next Trade: " + str(nextTrade))
+      cost = 0
+      if nextTrade != 0:
+        cost = self.fixed_cost + (self.floating_cost * abs(nextTrade) * data.loc[day, symbol])
+      wallet.loc[day, 'Cash'] -= (data.loc[day, symbol] * nextTrade) + cost
+      wallet.loc[day, 'Holdings'] += nextTrade
+        #wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
+      wallet.loc[day, 'Trades'] = nextTrade
+
+      #End of Day
+
+      # Compose the output trade list.
+    trade_list = []
+      #print(wallet.to_string())
+    for day in wallet.index:
+      if wallet.loc[day,'Trades'] == 2000:
+        trade_list.append([day.date(), symbol, 'BUY', 2000])
+      elif wallet.loc[day,'Trades'] == 1000:
+        trade_list.append([day.date(), symbol, 'BUY', 1000])
+      elif wallet.loc[day,'Trades'] == -1000:
+        trade_list.append([day.date(), symbol, 'SELL', 1000])
+      elif wallet.loc[day,'Trades'] == -2000:
+          trade_list.append([day.date(), symbol, 'SELL', 2000])
+      
+      #print(trade_list)
+    trade_df = pd.DataFrame(trade_list, columns=['Date', 'Symbol', 'Direction', 'Shares'])
+    trade_df = trade_df.set_index('Date')
+      #print(trade_df)
+    trade_df.to_csv('trades.csv')
+      #print(wallet)
+      #print(trade_df)
+      #make call to backtester here
+    stats = assess_strategy()
+    print(stats)
+    
+    return True
   
 
 if __name__ == '__main__':
@@ -308,7 +425,7 @@ if __name__ == '__main__':
   # Test the learned policy and see how it does.
 
   # In sample.
-  env.test_learner( start = args.train_start, end = args.train_end, symbol = args.symbol )
+  env.test_learner(start = args.train_start, end = args.train_end, symbol = args.symbol )
 
   # Out of sample.  Only do this once you are fully satisfied with the in sample performance!
   #env.test_learner( start = args.test_start, end = args.test_end, symbol = args.symbol )
