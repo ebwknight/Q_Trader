@@ -2,6 +2,7 @@ import argparse
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+from pydantic import constr
 from readData import get_data
 from tech_ind import MACD, RSI, BBP
 from TabularQLearner import TabularQLearner
@@ -17,8 +18,24 @@ class StockEnvironment:
     self.starting_cash = starting_cash
     self.QL = None
     self.lastBuy = None
-    self.lastLastBuy = None
 
+    #MACD percentile buckets
+    self.macdQ1 = 0
+    self.macdQ2 = 0
+    self.macdQ3 = 0
+    self.macdQ4 = 0
+
+    #BBP
+    self.bbpQ1 = 0
+    self.bbpQ2 = 0
+    self.bbpQ3 = 0
+    self.bbpQ4 = 0
+
+    #RSI
+    self.rsiQ1 = 0
+    self.rsiQ2 = 0
+    self.rsiQ3 = 0
+    self.rsiQ4 = 0
 
 
   def prepare_world (self, start_date, end_date, symbol):
@@ -36,6 +53,24 @@ class StockEnvironment:
     prices = prices.join(macd, how='left')
     prices = prices.join(signal, how='left')
     del prices['SIG']
+
+    #MACD percentile buckets
+    self.macdQ1 = np.nanpercentile(prices['MACD'], 20)
+    self.macdQ2 = np.nanpercentile(prices['MACD'], 40)
+    self.macdQ3 = np.nanpercentile(prices['MACD'], 60)
+    self.macdQ4 = np.nanpercentile(prices['MACD'], 80)
+
+    #BBP
+    self.bbpQ1 = np.nanpercentile(prices['BBP'], 20)
+    self.bbpQ2 = np.nanpercentile(prices['BBP'], 40)
+    self.bbpQ3 = np.nanpercentile(prices['BBP'], 60)
+    self.bbpQ4 = np.nanpercentile(prices['BBP'], 80)
+
+    #RSI
+    self.rsiQ1 = np.nanpercentile(prices['RSI'], 20)
+    self.rsiQ2 = np.nanpercentile(prices['RSI'], 40)
+    self.rsiQ3 = np.nanpercentile(prices['RSI'], 60)
+    self.rsiQ4 = np.nanpercentile(prices['RSI'], 80)
     #print(prices)
     return prices
 
@@ -49,49 +84,33 @@ class StockEnvironment:
     elif holdings < 0:
       h = 2 #short
 
-    rsiQ1 = np.nanpercentile(df['RSI'], 20)
-    rsiQ2 = np.nanpercentile(df['RSI'], 40)
-    rsiQ3 = np.nanpercentile(df['RSI'], 60)
-    rsiQ4 = np.nanpercentile(df['RSI'], 80)
-
     #bucket into 0-4
     rsiState = 0
     rsi = df.loc[day, 'RSI']
     #print('calculating state for : ' + str(day))
-    if (rsi < rsiQ1): rsiState = 0
-    elif (rsi < rsiQ2 and rsi >= rsiQ1): rsiState = 1
-    elif (rsi < rsiQ3 and rsi >= rsiQ2): rsiState = 2
-    elif (rsi < rsiQ4 and rsi >= rsiQ3): rsiState = 3
-    elif (rsi <= 100 and rsi >= rsiQ4): rsiState = 4
-
-    #BBP
-    bbpQ1 = np.nanpercentile(df['BBP'], 20)
-    bbpQ2 = np.nanpercentile(df['BBP'], 40)
-    bbpQ3 = np.nanpercentile(df['BBP'], 60)
-    bbpQ4 = np.nanpercentile(df['BBP'], 80)
+    if (rsi < self.rsiQ1): rsiState = 0
+    elif (rsi < self.rsiQ2 and rsi >= self.rsiQ1): rsiState = 1
+    elif (rsi < self.rsiQ3 and rsi >= self.rsiQ2): rsiState = 2
+    elif (rsi < self.rsiQ4 and rsi >= self.rsiQ3): rsiState = 3
+    elif (rsi <= 100 and rsi >= self.rsiQ4): rsiState = 4
 
     #bucket into 0-4
     bbpState = 0
     bbp = df.loc[day, 'BBP']
-    if (bbp < bbpQ1): bbpState = 0
-    elif (bbp < bbpQ2 and bbp >= bbpQ1): bbpState = 1
-    elif (bbp < bbpQ3 and bbp >= bbpQ2): bbpState = 2
-    elif (bbp < bbpQ4 and bbp >= bbpQ3): bbpState = 3
-    elif (bbp <= 100 and bbp >= bbpQ4): bbpState = 4
-
-    macdQ1 = np.nanpercentile(df['MACD'], 20)
-    macdQ2 = np.nanpercentile(df['MACD'], 40)
-    macdQ3 = np.nanpercentile(df['MACD'], 60)
-    macdQ4 = np.nanpercentile(df['MACD'], 80)
+    if (bbp < self.bbpQ1): bbpState = 0
+    elif (bbp < self.bbpQ2 and bbp >= self.bbpQ1): bbpState = 1
+    elif (bbp < self.bbpQ3 and bbp >= self.bbpQ2): bbpState = 2
+    elif (bbp < self.bbpQ4 and bbp >= self.bbpQ3): bbpState = 3
+    elif (bbp <= 100 and bbp >= self.bbpQ4): bbpState = 4
 
     #bucket into 0-4
     macdState = 0
     macd = df.loc[day, 'MACD']
-    if (macd < macdQ1): macdState = 0
-    elif (macd < macdQ2 and macd >= macdQ1): macdState = 1
-    elif (macd < macdQ3 and macd >= macdQ2): macdState = 2
-    elif (macd < macdQ4 and macd >= macdQ3): macdState = 3
-    elif (macd <= 100 and macd >= macdQ4): macdState = 4
+    if (macd < self.macdQ1): macdState = 0
+    elif (macd < self.macdQ2 and macd >= self.macdQ1): macdState = 1
+    elif (macd < self.macdQ3 and macd >= self.macdQ2): macdState = 2
+    elif (macd < self.macdQ4 and macd >= self.macdQ3): macdState = 3
+    elif (macd <= 100 and macd >= self.macdQ4): macdState = 4
     
     #print("state holdings: " + str(h))
     #print("day's rsi: " + str(rsi))
@@ -107,36 +126,16 @@ class StockEnvironment:
     return s
     
 
-  def reward(self, day, wallet):
+  def reward(self, day, wallet, sold):
 
-    r = 0
-    #checking for selling isn't working
-    sold = (wallet.shift(periods = 2).loc[day,'Holdings'], wallet.shift(periods = 1).loc[day,'Holdings'])
-    #print(wallet["Holdings"])
-
-    #conditions for a normal flat
-    normal_flat = [(-1000.,0.), (1000., 0.)]
-    #crossing flat-> still exiting though, so we should give a long term reward
-    cross_flat = [(-1000.,1000.), (1000., -1000.)]
-
-    if (sold in normal_flat): #sanity check
-      #print("giving reward for selling")
-      short_reward = wallet.loc[day, 'Value'] - wallet.shift(periods=1).loc[day,'Value']
-      long_reward = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
-      #print('short reward: ' + str(short_reward))
-      #print('long reward: ' + str(long_reward))
-      r = short_reward + long_reward
-      #print(r)
-    elif(sold in cross_flat):
-      short_reward = wallet.loc[day, 'Value'] - wallet.shift(periods=1).loc[day,'Value']
-      long_reward = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
-      #print('short reward: ' + str(short_reward))
-      #print('long reward: ' + str(long_reward))
-      r = short_reward + long_reward
-    else:
-      r = wallet.loc[day, 'Value'] - wallet.shift(periods=1).loc[day,'Value']
-    
-    return r
+    #Short term reward
+    r = wallet.loc[day, 'Value'] - wallet.shift(periods=1).loc[day,'Value']
+    '''
+    Return short term reward plus the value of sold.
+    sold will be the cumulative value of the last long or short position
+    or 0 if the position is still open or we are flat
+    '''
+    return r + sold
 
   def train_learner( self, start = None, end = None, symbol = None, trips = 0, dyna = 0,
                      eps = 0.0, eps_decay = 0.0 ):
@@ -163,6 +162,7 @@ class StockEnvironment:
     #for plotting
     srVals = []
     tVals = []
+    prevFinalVal = 0
 
     while ((endCondition != True) and (tripNum < 200)):
 
@@ -185,7 +185,6 @@ class StockEnvironment:
         nextTrade = 0
       elif (a == 2): #SHORT
         nextTrade = -1000
-        
         self.lastBuy = firstDay
 
       cost = 0
@@ -196,7 +195,7 @@ class StockEnvironment:
       wallet.loc[firstDay, 'Value'] = wallet.loc[firstDay, 'Cash'] + (data.loc[firstDay, symbol] * wallet.loc[firstDay, 'Holdings'])
       wallet.loc[firstDay, 'Trades'] = nextTrade
       
-      #NEED TO FACTOR IN TRADING COSTS
+      sold = 0
       for day in data.index[1:]:
         #update wallet with yesterdays values
         wallet.loc[day, 'Holdings'] = wallet.shift(periods=1).loc[day, 'Holdings']
@@ -205,30 +204,36 @@ class StockEnvironment:
   
         s = self.calc_state(data, day, wallet.loc[day, 'Holdings'])
         #print("State: " + str(s))
-        r = self.reward(day, wallet)
+        r = self.reward(day, wallet, sold)
+        sold = 0
         #print("Reward: " + str(r))
         a =self.QL.train(s, r)
-        #prxint("Action: " + str(a))
-
+        #print("Action: " + str(a))
+        #print(wallet)
         nextTrade = 0
         if ((a == 0) and (wallet.loc[day, 'Holdings'] != 1000)): #LONG
           #print('buying or holding long position...')
           nextTrade = 1000 - wallet.loc[day, 'Holdings']
-          self.lastLastBuy = self.lastBuy
+          if (wallet.loc[day, 'Holdings'] != 0):
+            sold = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
           self.lastBuy = day          
         elif ((a == 2) and (wallet.loc[day, 'Holdings'] != -1000)): #SHORT
           #print('selling or holding short position...')
           nextTrade = -1000 - wallet.loc[day, 'Holdings']
-          self.lastLastBuy = self.lastBuy
+          if (wallet.loc[day, 'Holdings'] != 0):
+            sold = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
           self.lastBuy = day
         elif (a == 1): #FLAT
           #print('moving to flat position...')
           nextTrade = 0 - wallet.loc[day, 'Holdings']
+          if (wallet.loc[day, 'Holdings'] != 0):
+            sold = wallet.loc[day, 'Value'] - wallet.loc[self.lastBuy, 'Value']
 
         #print("next Trade: " + str(nextTrade))
         cost = 0
         if nextTrade != 0:
           cost = self.fixed_cost + (self.floating_cost * abs(nextTrade) * data.loc[day, symbol])
+          #print("cost " + str(cost))
         wallet.loc[day, 'Cash'] -= (data.loc[day, symbol] * nextTrade) + cost
         wallet.loc[day, 'Holdings'] += nextTrade
         #wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
@@ -257,22 +262,28 @@ class StockEnvironment:
       #print(wallet)
       #print(trade_df)
       #make call to backtester here
-      stats = assess_strategy()
-      if (stats[0] == prevSR):
-        endCondition = True
-      prevSR = stats[0]
-      srVals.append(stats[4])
+      #stats = assess_strategy(fixed_cost=0, floating_cost=0)
+      # if (stats[0] == prevSR):
+      #   endCondition = True
+      # prevSR = stats[0]
+      # srVals.append(stats[4])
+      finalVal = wallet['Value'].iloc[-1]
+      srVals.append(finalVal)
       tVals.append(tripNum)
+      if (finalVal == prevFinalVal):
+        endCondition = True
+      prevFinalVal = finalVal
       # if (tripNum % 10 == 0):
       #   plt.plot(wallet['Value'] / wallet['Value'].iloc[0])
 
       #break
+    stats = assess_strategy(fixed_cost=0, floating_cost=0)
     plt.plot(tVals, srVals)
     plt.savefig('BaselineVsQTrader.png')
     return True
 
   
-  def test_learner(self, start = None, end = None, symbol = None):
+  def test_learner( self, start = None, end = None, symbol = None):
     """
     Evaluate a trained Q-Learner on a particular stock trading task.
 
@@ -281,15 +292,10 @@ class StockEnvironment:
 
     Test trip, net result: $31710.00
     Benchmark result: $6690.0000
-
-
-    Similair to train, but does not update q table orc caluclate rewards, and 
-    only runs through the data a single time
     """
+    print("\nTesting Q Learner from " + str(start) + " to " + str(end) + "\n")
     data = self.prepare_world(start, end, symbol)
     wallet = pd.DataFrame(columns=['Cash', 'Holdings', 'Value', 'Trades'], index=data.index)
-    #print(data)
-    prevSR = 0
 
     wallet['Cash'] = self.starting_cash
     wallet['Holdings'] = 0
@@ -300,15 +306,14 @@ class StockEnvironment:
     s = self.calc_state(data, firstDay, 0)
     a = self.QL.test(s)
 
+    #print("first action: " + str(a))
     nextTrade = 0
     if (a == 0): #LONG
       nextTrade = 1000
-      self.lastBuy = firstDay
     elif (a == 1): #FLAT
       nextTrade = 0
     elif (a == 2): #SHORT
-      nextTrade = -1000 
-      self.lastBuy = firstDay
+      nextTrade = -1000
 
     cost = 0
     if nextTrade != 0:
@@ -317,41 +322,40 @@ class StockEnvironment:
     wallet.loc[firstDay, 'Holdings'] += nextTrade
     wallet.loc[firstDay, 'Value'] = wallet.loc[firstDay, 'Cash'] + (data.loc[firstDay, symbol] * wallet.loc[firstDay, 'Holdings'])
     wallet.loc[firstDay, 'Trades'] = nextTrade
-      
-      #NEED TO FACTOR IN TRADING COSTS
+    
     for day in data.index[1:]:
       #update wallet with yesterdays values
       wallet.loc[day, 'Holdings'] = wallet.shift(periods=1).loc[day, 'Holdings']
       wallet.loc[day, 'Cash'] = wallet.shift(periods=1).loc[day, 'Cash']
       wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
-  
+
       s = self.calc_state(data, day, wallet.loc[day, 'Holdings'])
       a =self.QL.test(s)
-
+      #print("Action: " + str(a))
+      #print(wallet)
       nextTrade = 0
       if ((a == 0) and (wallet.loc[day, 'Holdings'] != 1000)): #LONG
+        #print('buying or holding long position...')
         nextTrade = 1000 - wallet.loc[day, 'Holdings']
-        self.lastLastBuy = self.lastBuy
-        self.lastBuy = day          
       elif ((a == 2) and (wallet.loc[day, 'Holdings'] != -1000)): #SHORT
+        #print('selling or holding short position...')
         nextTrade = -1000 - wallet.loc[day, 'Holdings']
-        self.lastLastBuy = self.lastBuy
-        self.lastBuy = day
       elif (a == 1): #FLAT
+        #print('moving to flat position...')
         nextTrade = 0 - wallet.loc[day, 'Holdings']
 
+      #print("next Trade: " + str(nextTrade))
       cost = 0
       if nextTrade != 0:
         cost = self.fixed_cost + (self.floating_cost * abs(nextTrade) * data.loc[day, symbol])
+        #print("cost " + str(cost))
       wallet.loc[day, 'Cash'] -= (data.loc[day, symbol] * nextTrade) + cost
       wallet.loc[day, 'Holdings'] += nextTrade
-        #wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
+      #wallet.loc[day, 'Value'] = wallet.loc[day, 'Cash'] + (data.loc[day, symbol] * wallet.loc[day, 'Holdings'])
       wallet.loc[day, 'Trades'] = nextTrade
 
-      #End of Day
-
-      # Compose the output trade list.
     trade_list = []
+    #print(wallet.to_string())
     for day in wallet.index:
       if wallet.loc[day,'Trades'] == 2000:
         trade_list.append([day.date(), symbol, 'BUY', 2000])
@@ -360,15 +364,23 @@ class StockEnvironment:
       elif wallet.loc[day,'Trades'] == -1000:
         trade_list.append([day.date(), symbol, 'SELL', 1000])
       elif wallet.loc[day,'Trades'] == -2000:
-          trade_list.append([day.date(), symbol, 'SELL', 2000])
-      
+        trade_list.append([day.date(), symbol, 'SELL', 2000])
+
     trade_df = pd.DataFrame(trade_list, columns=['Date', 'Symbol', 'Direction', 'Shares'])
     trade_df = trade_df.set_index('Date')
     trade_df.to_csv('trades.csv')
-      #make call to backtester here
-    print('TESTING STATS:')
-    stats = assess_strategy()
+    #make call to backtester here
+    print("Q Trader preformance: ")
+    stats = assess_strategy(fixed_cost=0, floating_cost=0)
+    o = OracleStrategy(start, end, [symbol])
+    print("\nBaseline: ")
+    bline = o.test(start_date=start, end_date=end, symbol=symbol)
+    print(bline[symbol].iloc[-1])
 
+    plt.clf()
+    plt.plot(wallet.index, wallet['Value'])
+    plt.plot(wallet.index, bline[symbol])
+    plt.savefig('TestPerformanceVsBaseline')
     return True
   
 
@@ -391,8 +403,8 @@ if __name__ == '__main__':
 
   sim_args = parser.add_argument_group('simulation arguments')
   sim_args.add_argument('--cash', default=200000, type=float, help='Starting cash for the agent.')
-  sim_args.add_argument('--fixed', default=9.95, type=float, help='Fixed transaction cost.')
-  sim_args.add_argument('--floating', default='0.005', type=float, help='Floating transaction cost.')
+  sim_args.add_argument('--fixed', default=0.0, type=float, help='Fixed transaction cost.')
+  sim_args.add_argument('--floating', default='0.0', type=float, help='Floating transaction cost.')
   sim_args.add_argument('--shares', default=1000, type=int, help='Number of shares to trade (also position limit).')
   sim_args.add_argument('--symbol', default='DIS', help='Stock symbol to trade.')
   sim_args.add_argument('--trips', default=500, type=int, help='Round trips through training data.')
@@ -403,21 +415,20 @@ if __name__ == '__main__':
   env = StockEnvironment( fixed = args.fixed, floating = args.floating, starting_cash = args.cash,
                           share_limit = args.shares )
 
-  o = OracleStrategy()
-  bline = o.test(args.train_start, args.train_end)
+  #o = OracleStrategy()
+  #bline = o.test(args.train_start, args.train_end)
   #plt.plot(bline / bline.iloc[0])
   print("Beginning training...")
   # Construct, train, and store a Q-learning trader.
-  env.train_learner(start = args.train_start, end = args.train_end,
+  env.train_learner( start = args.train_start, end = args.train_end,
                      symbol = args.symbol, trips = args.trips, dyna = args.dyna,
                      eps = args.eps, eps_decay = args.eps_decay )
 
   # Test the learned policy and see how it does.
 
   # In sample.
-  env.test_learner(start = args.train_start, end = args.train_end, symbol = args.symbol )
+  env.test_learner( start = args.test_start, end = args.test_end, symbol = args.symbol )
 
   # Out of sample.  Only do this once you are fully satisfied with the in sample performance!
   #env.test_learner( start = args.test_start, end = args.test_end, symbol = args.symbol )
-
 
