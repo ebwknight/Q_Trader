@@ -65,6 +65,8 @@ class OracleStrategy:
         # plt.savefig('Oracle_vs_baseline')
 
         #[symbol].iloc[-1]
+
+        #CURRENTLY PROVIDING BASELINE STATS NOT ORACLE
         return (bline * 1000) + starting_cash
 
 def main():

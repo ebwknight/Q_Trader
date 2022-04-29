@@ -1,8 +1,9 @@
 import argparse
+from cProfile import label
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-from pydantic import constr
+from sympy import numbered_symbols
 from readData import get_data
 from tech_ind import MACD, RSI, BBP
 from TabularQLearner import TabularQLearner
@@ -277,9 +278,18 @@ class StockEnvironment:
       #   plt.plot(wallet['Value'] / wallet['Value'].iloc[0])
 
       #break
-    stats = assess_strategy(fixed_cost=0, floating_cost=0)
+    print("\Trained Q Learner in Sample " + str(start) + " to " + str(end) + "\n")
+    stats = assess_strategy(fixed_cost=self.fixed_cost, floating_cost=self.floating_cost)
+    '''
     plt.plot(tVals, srVals)
     plt.savefig('QTraderTrials.png')
+
+    plt.clf()
+    plt.title('Fixed Cost: ' + str(self.floating_cost))
+    plt.xlabel("Trips")
+    plt.ylabel("Portfolio Value")
+    plt.plot(tVals, srVals)
+    plt.show()'''
     return True
 
   
@@ -293,6 +303,8 @@ class StockEnvironment:
     Test trip, net result: $31710.00
     Benchmark result: $6690.0000
     """
+    num_trades = 0
+
     print("\nTesting Q Learner from " + str(start) + " to " + str(end) + "\n")
     data = self.prepare_world(start, end, symbol)
     wallet = pd.DataFrame(columns=['Cash', 'Holdings', 'Value', 'Trades'], index=data.index)
@@ -348,6 +360,7 @@ class StockEnvironment:
       cost = 0
       if nextTrade != 0:
         cost = self.fixed_cost + (self.floating_cost * abs(nextTrade) * data.loc[day, symbol])
+        num_trades +=1
         #print("cost " + str(cost))
       wallet.loc[day, 'Cash'] -= (data.loc[day, symbol] * nextTrade) + cost
       wallet.loc[day, 'Holdings'] += nextTrade
@@ -371,16 +384,24 @@ class StockEnvironment:
     trade_df.to_csv('trades.csv')
     #make call to backtester here
     print("Q Trader preformance: ")
-    stats = assess_strategy(fixed_cost=0, floating_cost=0)
+    stats = assess_strategy()
     o = OracleStrategy(start, end, [symbol])
     print("\nBaseline: ")
     bline = o.test(start_date=start, end_date=end, symbol=symbol)
     print(bline[symbol].iloc[-1])
-
+    '''
     plt.clf()
-    plt.plot(wallet.index, wallet['Value'])
-    plt.plot(wallet.index, bline[symbol])
-    plt.savefig('TestPerformanceVsBaseline')
+    
+    plt.title('Out of Sample Performance Comparison')
+    plt.plot(wallet.index, wallet['Value'], label="Q-Trader Strategy")
+    plt.plot(wallet.index, bline[symbol], label = "Baseline Strategy")
+    plt.legend()
+    plt.savefig('TestPerformanceVsBaseline')'''
+
+    print('NUMBER OF TRADES: ' + str(num_trades))
+
+    
+
     return True
   
 
@@ -403,8 +424,8 @@ if __name__ == '__main__':
 
   sim_args = parser.add_argument_group('simulation arguments')
   sim_args.add_argument('--cash', default=200000, type=float, help='Starting cash for the agent.')
-  sim_args.add_argument('--fixed', default=0.0, type=float, help='Fixed transaction cost.')
-  sim_args.add_argument('--floating', default='0.0', type=float, help='Floating transaction cost.')
+  sim_args.add_argument('--fixed', default=9.95, type=float, help='Fixed transaction cost.')
+  sim_args.add_argument('--floating', default=0.005, type=float, help='Floating transaction cost.')
   sim_args.add_argument('--shares', default=1000, type=int, help='Number of shares to trade (also position limit).')
   sim_args.add_argument('--symbol', default='DIS', help='Stock symbol to trade.')
   sim_args.add_argument('--trips', default=500, type=int, help='Round trips through training data.')
@@ -412,21 +433,24 @@ if __name__ == '__main__':
   args = parser.parse_args()
   print(args)
   # Create an instance of the environment class.
-  env = StockEnvironment( fixed = args.fixed, floating = args.floating, starting_cash = args.cash,
+  env = StockEnvironment(fixed = args.fixed, floating = args.floating, starting_cash = args.cash,
                           share_limit = args.shares )
+  
 
   #o = OracleStrategy()
   #bline = o.test(args.train_start, args.train_end)
   #plt.plot(bline / bline.iloc[0])
   print("Beginning training...")
   # Construct, train, and store a Q-learning trader.
-  env.train_learner( start = args.train_start, end = args.train_end,
+  env.train_learner(start = args.train_start, end = args.train_end,
                      symbol = args.symbol, trips = args.trips, dyna = args.dyna,
                      eps = args.eps, eps_decay = args.eps_decay )
 
+
+
   # Test the learned policy and see how it does.
 
-  # In sample.
+  # oos.
   env.test_learner( start = args.test_start, end = args.test_end, symbol = args.symbol )
 
   # Out of sample.  Only do this once you are fully satisfied with the in sample performance!

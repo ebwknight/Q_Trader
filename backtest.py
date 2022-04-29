@@ -7,7 +7,7 @@ from readData import get_data
 
 
 def assess_portfolio (portfolio, starting_value=200000, risk_free_rate=0.0,
-                      sample_freq=252, plot_returns=False):
+                      sample_freq=252, plot_returns=True):
 
     cumulative_return = ((portfolio.iloc[-1]) / starting_value) - 1
     end_value = (cumulative_return + 1) * starting_value
@@ -22,7 +22,7 @@ def assess_portfolio (portfolio, starting_value=200000, risk_free_rate=0.0,
     print("Cumulative Return: " + str(cumulative_return))
     print("End value: " + str(end_value))
 
-    if plot_returns:
+    '''if plot_returns:
 
         plt.xlabel('Date')
         plt.ylabel('Cumulative Return')
@@ -32,10 +32,10 @@ def assess_portfolio (portfolio, starting_value=200000, risk_free_rate=0.0,
         plt.savefig('PortfolioVsSPY.png')
         plt.close()
 
-    return sharpe_ratio, stdev_daily_return, average_daily_return, cumulative_return, end_value
+    return sharpe_ratio, stdev_daily_return, average_daily_return, cumulative_return, end_value'''
 
 def assess_strategy(trade_file = "trades.csv", starting_value = 200000, fixed_cost = 9.95, floating_cost = 0.005):
-
+    
     trade_df = pd.read_csv(trade_file, index_col="Date", parse_dates=True, na_values=['nan'])
     #print(trade_df)
     start_date = trade_df.index[0]
